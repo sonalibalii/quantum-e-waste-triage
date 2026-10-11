@@ -1,146 +1,228 @@
-# Qiskit Fall Fest 2026 — Project Submission Template
-**IIIT Kottayam Quantum Hackathon (24-Hour Sprint)**
-
-> ⚠️ **CRITICAL INSTRUCTIONS FOR PARTICIPANTS:**
-> 1. **Do NOT rename or delete the section headings** below. The automated AI evaluation and filtering system relies on this exact Markdown structure to parse and grade your project.
-> 2. Replace all placeholder text enclosed in `[brackets]` with your project's details.
-> 3. **Commit History Audit:** All project commits must be timestamped strictly within the 24-hour hackathon window (between **October 10, 2026 at 7:05 PM** and **October 11, 2026 at 7:05 PM**). Commits observed outside this window will result in **immediate disqualification**.
-> 4. Ensure all Jupyter Notebooks have their cells **run and outputs displayed** before pushing.
-> 5. Starter resources and reference guides are located in the [`references/`](./references/) folder.
-> 6. **Tech Stack Flexibility:** You are free to use any external frameworks/technologies (e.g., Streamlit, React, Pygame, FastAPI, NetworkX) for your frontend, app logic, or classical baselines. However, **Qiskit MUST power the quantum core** of your project.
-> 7. **Full Event Guide & Rules:** For full schedule details, track inspirations, submission steps, and grading focus areas, refer to [`HACKATHON_GUIDE.md`](./HACKATHON_GUIDE.md).
-
-*(You may delete the instructions box above when preparing your final repository submission)*
-
----
-
 # Project Title
 
 ## Project Metadata
 
-* **Project Title:** `[Your Project Title]`
-* **Team Name:** `[Your Team Name]`
-* **Chosen Track:** `[Track 1: Quantum Games & Interactive Puzzles OR Track 2: Open-Domain Optimization & Real-World Solvers]`
-* **Video Presentation Link:** `[Insert YouTube Unlisted / Google Drive / Loom URL here]`
-  *(⚠️ Crucial: Ensure link access is set to "Anyone with the link can view" on Google Drive or "Unlisted / Public" on YouTube. Locked/inaccessible links cannot be scored!)*
-* **Live Demo Timestamp in Video:** `[MM:SS]` *(e.g., "Demo starts at 03:45")*
+- **Project Title:** Quantum E-Waste Triage
+- **Team Name:** Sonali
+- **Chosen Track:** Track 2: Open-Domain Optimization & Real-World Solvers
+- **Video Presentation Link:** https://drive.google.com/file/d/1ftMwH1FjshFIXALlJBQ2AQNCMbdok_T4/view?usp=drivesdk
+- **Live Demo Timestamp in Video:** 2 :55m
 
 ### Team Members (Max 4 members)
-| Name | Email | GitHub Username |
-| :--- | :--- | :--- |
-| `[Member 1 Name]` | `[Email]` | `[@username]` |
-| `[Member 2 Name]` | `[Email]` | `[@username]` |
-| `[Member 3 Name]` | `[Email]` | `[@username]` |
-| `[Member 4 Name]` | `[Email]` | `[@username]` |
 
----
+| Name | Email | GitHub Username |
+|---|---|---|
+| Sonali | sonali34409@gmail.com | @sonalibalii |
 
 ## 1. Project Overview & Motivation
 
-* **Summary (3–4 sentences):**  
-  `[Provide a concise executive summary of what you built. What is the game or optimization dilemma?]`
+Electronic waste (e-waste) contains valuable recoverable materials, but collection teams often have limited transport capacity and must decide which waste batches to collect first.
 
-* **Why this problem / game?**  
-  `[Explain why you chose this specific topic. Why is it engaging, practically relevant, or pedagogically meaningful?]`
+Quantum E-Waste Triage models this as a capacity-constrained binary optimization problem. Each batch has a weight, recovery estimate, urgency score, and environmental priority. The system selects a combination of batches that maximizes the total priority score without exceeding the available collection capacity.
 
----
+The project uses Qiskit to simulate a QAOA-style optimization approach and compares its result against an exact classical baseline. An interactive Streamlit dashboard allows users to edit the inventory, change capacity, compare the solutions, and export the results.
+
+The goal is to demonstrate how quantum optimization techniques can be explored for a practical resource-allocation problem while honestly evaluating their results against classical methods.
 
 ## 2. Quantum Architecture & Mechanics
 
-* **Core Quantum Principles Used:**  
-  `[Specify the exact quantum principles at play: e.g., Superposition (H gate), Entanglement (Bell states / CNOT), Measurement Collapse, Interference, or QAOA Cost Hamiltonian.]`
+### Problem Formulation
 
-* **How the Quantum Circuit is Integrated:**  
-  `[Explain how quantum states map to your game board, strategy, or optimization problem. How does your Qiskit circuit interact with player input or the optimization loop?]`
+Each waste batch is represented by a binary decision variable \(x_i\):
 
-* **Circuit Details:**  
-  * **Number of Qubits:** `[e.g., 4 qubits]`
-  * **Key Gates Used:** `[e.g., H, CX, RZ, Measurement]`
-  * **Primitives Used:** `[e.g., StatevectorSampler, StatevectorEstimator, or Qiskit Aer simulator]`
-  * **Other Technologies Used:** `[e.g., Streamlit for UI, NetworkX for graph generation, Pygame, etc. (Note: Qiskit must power the quantum logic)]`
+- \(x_i=1\): Select the batch for collection.
+- \(x_i=0\): Do not select the batch.
 
-```python
-# Optional: Paste a representative snippet of your core Qiskit circuit code here
-```
+Let \(w_i\) represent the weight and \(p_i\) represent the priority score of batch \(i\). The objective is to maximize the total priority score without exceeding the available capacity \(C\).
 
----
+\[
+\text{Maximize }\sum_i p_i x_i
+\]
+
+Subject to:
+
+\[
+\sum_i w_i x_i \leq C,\qquad x_i\in\{0,1\}
+\]
+
+The priority score is calculated as:
+
+\[
+p_i=r_i+2u_i+2e_i
+\]
+
+where \(r_i\) is the recovery estimate, \(u_i\) is urgency, and \(e_i\) is environmental priority.
+
+### Qiskit Implementation
+
+The project uses a one-layer QAOA-style circuit simulation with Qiskit:
+
+1. **Initialization:** Hadamard gates prepare a superposition of candidate selections.
+2. **Cost operation:** A diagonal unitary encodes objective values for candidate selections.
+3. **Mixer operation:** RX rotations mix candidate states.
+4. **Parameter search:** A grid search evaluates combinations of circuit parameters.
+5. **Simulation and selection:** Statevector simulation and sampled counts are used to identify a candidate solution.
+
+This is a simulation-based QAOA-style prototype. It does not claim execution on quantum hardware or demonstrate quantum advantage.
+
+### Classical Baseline
+
+An exact classical solver enumerates possible batch combinations for small instances and chooses the highest-scoring feasible selection. The dashboard compares both methods using priority score, collected weight, capacity utilization, and feasibility.
 
 ## 3. Repository Structure & How to Run
 
 ### Project Structure
+
 ```text
-├── README.md               # Project documentation (this file)
-├── requirements.txt        # Python dependencies
-├── src/                    # Source code scripts or game application
-│   └── main.py             # Main entry point (or streamlit app)
-├── notebooks/              # Jupyter notebooks containing experiments
-│   └── solution.ipynb      # Main runnable notebook with outputs
-└── references/             # Hackathon reference guides (Track 1 & Track 2)
+quantum-e-waste-triage/
+├── app.py
+├── requirements.txt
+├── src/
+│   └── optimizer.py
+├── test_optimizer.py
+├── notebooks/
+│   └── .gitkeep
+├── references/
+├── HACKATHON_GUIDE.md
+└── README.md
 ```
+
+- `app.py`: Streamlit dashboard for inventory editing, optimization, comparisons, visualizations, and CSV exports.
+- `src/optimizer.py`: Qiskit-based simulation and classical optimization logic.
+- `test_optimizer.py`: Validation checks for optimizer behavior.
+- `requirements.txt`: Python dependencies.
+- `notebooks/`: Directory reserved for notebooks.
+- `references/`: Supporting project references.
+- `HACKATHON_GUIDE.md`: Hackathon and project guidance.
 
 ### Installation & Execution Instructions
 
-> 💡 **Environment Recommendation:** To avoid package conflicts, we strongly suggest using a fresh Python virtual environment or Google Colab:
-> ```bash
-> python -m venv venv
-> source venv/bin/activate    # On Windows: venv\Scripts\activate
-> pip install -r requirements.txt
-> ```
+**Prerequisites:** Python and Git installed on your system.
 
-1. **Clone the repository:**
-   ```bash
-   git clone [your-repo-url]
-   cd [your-repo-folder]
-   ```
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. **Run the project / demo:**
-   ```bash
-   # If running a script or CLI game:
-   python src/main.py
+1. Clone the repository:
 
-   # If running a Streamlit web app:
-   streamlit run src/app.py
+```bash
+git clone https://github.com/sonalibalii/quantum-e-waste-triage.git
+cd quantum-e-waste-triage
+```
 
-   # Or open the Jupyter Notebook:
-   jupyter notebook notebooks/solution.ipynb
-   ```
+2. Create and activate a virtual environment.
 
----
+On Windows:
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+3. Install dependencies:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+4. Launch the dashboard:
+
+```bash
+streamlit run app.py
+```
+
+5. Run the validation checks:
+
+```bash
+python test_optimizer.py
+```
+
+**Deployed application:** https://quantum-e-waste-triage-mcfeahihrqs3thu5cdwkhu.streamlit.app/
 
 ## 4. Implementation Walkthrough & Live Demo
 
-* **Walkthrough of Gameplay / Optimization Pipeline:**  
-  `[Describe the user experience or algorithmic workflow step-by-step. What inputs does the user provide, what happens inside the quantum circuit, and what output is produced?]`
+The Streamlit dashboard provides an interactive interface for exploring capacity-constrained e-waste collection.
 
-* **Key Screenshots / Terminal Output:**  
-  `[Paste sample terminal output, game screenshots, or optimization convergence plots here to demonstrate that the project runs.]`
+The demonstration will cover:
 
----
+1. Opening the deployed dashboard.
+2. Reviewing the sample e-waste inventory and batch attributes.
+3. Editing batch weights, recovery estimates, urgency, and environmental priority.
+4. Changing the collection capacity.
+5. Running the QAOA-style simulation and exact classical baseline.
+6. Comparing selected batches, priority scores, collected weight, and capacity utilization.
+7. Inspecting comparison visualizations and exporting results as CSV files.
+
+The demonstration will show how changing capacity or inventory affects the collection plan.
+
+**Live demo:** https://quantum-e-waste-triage-mcfeahihrqs3thu5cdwkhu.streamlit.app/
+
+**Video presentation:** To be added after recording and uploading the video.
 
 ## 5. Classical vs. Quantum Comparison
 
-* **Classical Baseline / Counterpart:**  
-  `[What classical baseline did you compare against? (e.g., a classical player, a random guesser, a brute-force classical solver, or a naive greedy heuristic)]`
+The project compares a QAOA-style quantum circuit simulation with an exact classical baseline.
 
-* **Comparative Analysis:**  
-  `[How did the quantum approach compare to the classical baseline? For Track 1: Did quantum strategy give an unfair advantage or unique gameplay behavior? For Track 2: What was the approximation ratio (C_quantum / C_optimal) and feasibility yield?]`
+| Feature | QAOA-Style Simulation | Exact Classical Baseline |
+|---|---|---|
+| Approach | Qiskit circuit simulation with parameter grid search | Enumeration of candidate combinations |
+| Purpose | Explore a quantum optimization approach | Establish a reference solution |
+| Feasibility | Evaluated against capacity constraints | Evaluated against capacity constraints |
+| Output | Candidate selection and objective score | Highest-scoring feasible selection for the supported small instance |
+| Execution | Classical simulation of a quantum circuit | Classical computation |
 
----
+In the sample run with a 10 kg capacity, both approaches selected smartphones, used batteries, and cables.
+
+| Metric | QAOA-Style Simulation | Exact Classical |
+|---|---:|---:|
+| Priority score | 115 | 115 |
+| Collected weight | 10 kg | 10 kg |
+| Capacity used | 100% | 100% |
+| Feasible | Yes | Yes |
+
+Both methods achieved the same score in this example. This result does not establish quantum advantage; the classical baseline provides a reference for evaluating the simulated solution.
 
 ## 6. Performance, Results & Limitations
 
-* **Key Results & Observations:**  
-  `[Summarize the main results from your experiments, simulations, or gameplay tests.]`
+### Results
 
-* **Critical Reflection on Limitations:**  
-  `[Be honest and rigorous: What happens if this is scaled to larger qubit counts? How would physical quantum noise, gate errors, and decoherence affect your solution on real NISQ hardware? Acknowledging limitations demonstrates true scientific understanding!]`
+The previously tested optimizer produced the following results:
 
----
+| Capacity | Classical Score | Classical Weight | QAOA-Style Score | QAOA-Style Weight |
+|---:|---:|---:|---:|---:|
+| 5 kg | 62 | 5 kg | 62 | 5 kg |
+| 10 kg | 115 | 10 kg | 115 | 10 kg |
+| 15 kg | 163 | 14 kg | 163 | 14 kg |
+| 20 kg | 199 | 20 kg | 199 | 20 kg |
+
+The validation checks passed in the previously tested environment. Re-run the tests if the optimizer code has changed since those results were obtained.
+
+### Limitations
+
+- The sample inventory uses illustrative inputs rather than independently verified real-world measurements.
+- Recovery estimates and priority scores are user-defined points, not verified financial returns or environmental impact measurements.
+- The QAOA-style circuit is simulated classically; no quantum hardware execution is claimed.
+- The finite parameter grid does not guarantee optimal parameters for every instance.
+- Exact enumeration is practical for small instances but scales exponentially with the number of batches.
+- Matching results on sample instances do not demonstrate quantum advantage.
+- Real-world deployment would require validated waste data, operational constraints, and evaluation with collection teams.
+
+### Future Improvements
+
+Potential extensions include testing larger datasets, incorporating transportation and special-handling constraints, comparing additional optimization methods, and evaluating suitable implementations on quantum hardware when feasible.
 
 ## 7. References & Acknowledgments
 
-* `[Cite any open-source libraries, GitHub repositories, or research papers you referenced during the hackathon.]`
-* `[Acknowledge team contributions and tools used.]`
+- [Qiskit Documentation](https://docs.quantum.ibm.com/)
+- [Qiskit Optimization Documentation](https://qiskit-community.github.io/qiskit-optimization/)
+- [Streamlit Documentation](https://docs.streamlit.io/)
+- [NumPy Documentation](https://numpy.org/doc/)
+- [Qiskit Fall Fest 2026 IIIT Kottayam Hackathon Template](https://github.com/Shanwis/Qiskit-Fall-Fest-2026-IIITKottayam-Hackathon-Template)
+
+We acknowledge the open-source communities behind Qiskit, Streamlit, NumPy, and Python for providing tools that support experimentation with optimization and quantum circuit simulation.
+
+## About
+
+Quantum E-Waste Triage is a Qiskit-powered e-waste collection optimization project developed for Qiskit Fall Fest 2026, Track 2: Open-Domain Optimization & Real-World Solvers.
+
+The project combines a Qiskit-based QAOA-style simulation, an exact classical baseline, and an interactive Streamlit dashboard to explore capacity-constrained resource allocation.
+
+**Repository:** https://github.com/sonalibalii/quantum-e-waste-triage
+
+**Live Demo:** https://quantum-e-waste-triage-mcfeahihrqs3thu5cdwkhu.streamlit.app/
