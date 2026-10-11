@@ -7,11 +7,8 @@ from src.optimizer import (
     prepare_items,
     classical_baseline,
     qaoa_solution,
+    MAX_QAOA_BATCHES,
 )
-
-# --------------------------------------------------
-# PAGE CONFIGURATION
-# --------------------------------------------------
 
 st.set_page_config(
     page_title="Quantum E-Waste Triage",
@@ -19,278 +16,427 @@ st.set_page_config(
     layout="wide",
 )
 
-# --------------------------------------------------
-# HEADER
-# --------------------------------------------------
-
 st.title("♻️ Quantum E-Waste Triage")
 
 st.markdown(
     """
-    **Smarter e-waste collection under limited capacity.**
+    **Plan e-waste collection under limited capacity.**
 
-    Prioritize electronic waste using recovery value, urgency,
-    and environmental priority, then compare a QAOA-style
-    quantum-circuit simulation with an exact classical baseline.
+    Enter collection batches, estimate their recovery potential and
+    priorities, and compare a Qiskit-based simulation with an exact
+    classical optimization baseline.
     """
 )
 
 st.info(
-    "Research prototype • Illustrative data • Classical statevector "
-    "simulation, not quantum hardware. No quantum advantage is claimed."
+    "Research prototype. Entered weights can represent actual measurements. "
+    "Recovery and priority scores are user estimates, not verified market "
+    "prices or certified environmental-impact measurements. Simulation only; "
+    "no quantum advantage is claimed."
 )
 
 # --------------------------------------------------
-# DATA AND CAPACITY
+# COLLECTION SETTINGS
 # --------------------------------------------------
-
-items = prepare_items(BATCHES)
 
 st.sidebar.header("Collection settings")
 
-capacity = st.sidebar.slider(
-    "Collection capacity (kg)",
-    min_value=5,
-    max_value=20,
-    value=10,
-    step=1,
+capacity = st.sidebar.number_input(
+    "Available collection capacity (kg)",
+    min_value=0.1,
+    max_value=100000.0,
+    value=10.0,
+    step=1.0,
 )
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Priority scoring")
-st.sidebar.write("Recovery value: 1×")
+st.sidebar.write("Recovery estimate: 1×")
 st.sidebar.write("Urgency: 2×")
 st.sidebar.write("Environmental priority: 2×")
+st.sidebar.caption("These are illustrative scoring weights.")
 
-st.sidebar.caption(
-    "These weights are illustrative assumptions for this prototype."
-)
+# --------------------------------------------------
+# EDITABLE INVENTORY
+# --------------------------------------------------
 
-st.subheader("Available e-waste batches")
+st.header("1. Enter your e-waste batches")
 
-inventory = pd.DataFrame(items).rename(
-    columns={
-        "name": "E-waste batch",
-        "weight": "Weight (kg)",
-        "recovery": "Recovery value",
-        "urgency": "Urgency",
-        "environment": "Environmental priority",
-        "score": "Priority score",
-    }
-)
-
-st.dataframe(
-    inventory[
-        [
-            "E-waste batch",
-            "Weight (kg)",
-            "Recovery value",
-            "Urgency",
-            "Environmental priority",
-            "Priority score",
-        ]
-    ],
-    width="stretch",
-    hide_index=True,
+st.write(
+    "Edit the example rows, delete rows, or add your own batches. "
+    "Each row represents one collection batch."
 )
 
 st.caption(
-    "Priority score = recovery value + 2 × urgency "
-    "+ 2 × environmental priority."
+    "Recovery estimate is a non-negative priority score. "
+    "Urgency and environmental priority range from 0 to 10."
+)
+
+default_rows = [
+    {
+        "Batch name": batch["name"],
+        "Weight (kg)": float(batch["weight"]),
+        "Recovery estimate (points)": float(batch["recovery"]),
+        "Urgency (0–10)": float(batch["urgency"]),
+        "Environmental priority (0–10)": float(batch["environment"]),
+        "Special handling required": (
+            batch["name"].lower() == "used batteries"
+        ),
+    }
+    for batch in BATCHES
+]
+
+default_inventory = pd.DataFrame(default_rows)
+
+edited_inventory = st.data_editor(
+    default_inventory,
+    num_rows="dynamic",
+    hide_index=True,
+    width="stretch",
+    key="editable_inventory",
+    column_config={
+        "Batch name": st.column_config.TextColumn(
+            "Batch name",
+            help="Give every batch a unique name.",
+        ),
+        "Weight (kg)": st.column_config.NumberColumn(
+            "Weight (kg)",
+            min_value=0.01,
+            max_value=100000.0,
+            step=0.5,
+            format="%.2f",
+        ),
+        "Recovery estimate (points)": st.column_config.NumberColumn(
+            "Recovery estimate (points)",
+            min_value=0.0,
+            max_value=100000.0,
+            step=1.0,
+            format="%.2f",
+        ),
+        "Urgency (0–10)": st.column_config.NumberColumn(
+            "Urgency (0–10)",
+            min_value=0.0,
+            max_value=10.0,
+            step=1.0,
+        ),
+        "Environmental priority (0–10)": st.column_config.NumberColumn(
+            "Environmental priority (0–10)",
+            min_value=0.0,
+            max_value=10.0,
+            step=1.0,
+        ),
+        "Special handling required": st.column_config.CheckboxColumn(
+            "Special handling required",
+            help=(
+                "Flags a batch for manual review. "
+                "It does not enforce safety or transport regulations."
+            ),
+        ),
+    },
+)
+
+st.caption(
+    "The special-handling flag is only a reminder. Check applicable "
+    "packaging, segregation, transport, and hazardous-waste requirements "
+    "before arranging real collections."
 )
 
 # --------------------------------------------------
-# RUN OPTIMIZERS
+# OPTIMIZATION
 # --------------------------------------------------
 
-if st.button("Run optimization and compare", type="primary", width="stretch"):
-    with st.spinner("Evaluating candidate selections and running simulation..."):
-        classical = classical_baseline(items, capacity)
-        qaoa, details = qaoa_solution(items, capacity)
+st.header("2. Validate and optimize")
 
-    # Defensive checks
+if st.button(
+    "Run optimization and compare",
+    type="primary",
+    width="stretch",
+):
+    if edited_inventory.empty:
+        st.error("Add at least one batch.")
+        st.stop()
+
+    if len(edited_inventory) > MAX_QAOA_BATCHES:
+        st.error(
+            f"The Qiskit statevector prototype supports at most "
+            f"{MAX_QAOA_BATCHES} batches. Remove some rows to continue."
+        )
+        st.stop()
+
+    optimizer_input = edited_inventory.rename(
+        columns={
+            "Batch name": "name",
+            "Weight (kg)": "weight",
+            "Recovery estimate (points)": "recovery",
+            "Urgency (0–10)": "urgency",
+            "Environmental priority (0–10)": "environment",
+            "Special handling required": "special_handling",
+        }
+    ).to_dict(orient="records")
+
+    names = []
+
+    for row_number, batch in enumerate(optimizer_input, start=1):
+        name = batch.get("name")
+
+        if not isinstance(name, str) or not name.strip():
+            st.error(f"Row {row_number}: enter a batch name.")
+            st.stop()
+
+        names.append(name.strip().casefold())
+
+        for field in ("weight", "recovery", "urgency", "environment"):
+            value = batch.get(field)
+
+            if (
+                value is None
+                or pd.isna(value)
+                or isinstance(value, bool)
+                or not isinstance(value, (int, float))
+            ):
+                st.error(
+                    f"Row {row_number}: enter a valid number for {field}."
+                )
+                st.stop()
+
+        if batch["weight"] <= 0:
+            st.error(
+                f"Row {row_number}: weight must be greater than zero."
+            )
+            st.stop()
+
+        if batch["recovery"] < 0:
+            st.error(
+                f"Row {row_number}: recovery estimate cannot be negative."
+            )
+            st.stop()
+
+        for field in ("urgency", "environment"):
+            if not 0 <= batch[field] <= 10:
+                st.error(
+                    f"Row {row_number}: {field} must be between 0 and 10."
+                )
+                st.stop()
+
+    if len(names) != len(set(names)):
+        st.error(
+            "Batch names must be unique. Rename duplicate rows."
+        )
+        st.stop()
+
+    try:
+        items = prepare_items(optimizer_input)
+
+        with st.spinner("Evaluating collection choices..."):
+            classical = classical_baseline(items, capacity)
+            qaoa, details = qaoa_solution(items, capacity)
+
+    except (ValueError, TypeError, OverflowError) as error:
+        st.error(f"Could not optimize these batches: {error}")
+        st.stop()
+
     if not classical["feasible"] or not qaoa["feasible"]:
         st.error(
-            "At least one optimizer returned an infeasible result. "
-            "Please review the optimizer before relying on these results."
+            "An optimizer returned an infeasible selection. "
+            "Do not use these results as a collection plan."
         )
         st.stop()
 
     if qaoa["score"] > classical["score"]:
         st.error(
-            "The QAOA score exceeds the exact classical baseline. "
-            "Please investigate the scoring or evaluation logic."
+            "The simulated score exceeded the exact classical baseline. "
+            "Please review the optimizer."
         )
         st.stop()
 
     # --------------------------------------------------
-    # KEY METRICS
+    # METRICS
     # --------------------------------------------------
 
     st.divider()
-    st.header("Optimization results")
+    st.header("3. Optimization results")
 
     score_gap = classical["score"] - qaoa["score"]
 
-    if classical["score"] > 0:
-        gap_percent = 100 * score_gap / classical["score"]
-    else:
-        gap_percent = 0.0
+    gap_percent = (
+        100 * score_gap / classical["score"]
+        if classical["score"] > 0
+        else 0.0
+    )
 
     qaoa_utilization = 100 * qaoa["weight"] / capacity
     classical_utilization = 100 * classical["weight"] / capacity
 
     col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric(
-        "QAOA score",
-        qaoa["score"],
-        help="Score from the best feasible QAOA measurement sample found.",
-    )
+    col1.metric("QAOA-style score", f"{qaoa['score']:g}")
+    col2.metric("Classical optimum", f"{classical['score']:g}")
+    col3.metric("Score gap", f"{score_gap:g}")
+    col4.metric("Optimality gap", f"{gap_percent:.1f}%")
 
-    col2.metric(
-        "Classical optimum",
-        classical["score"],
-        help="Exact optimum found by evaluating every possible selection.",
-    )
-
-    col3.metric(
-        "Score gap",
-        score_gap,
-        help="Classical optimum score minus the QAOA score.",
-    )
-
-    col4.metric(
-        "Optimality gap",
-        f"{gap_percent:.1f}%",
-        help="Percentage by which the QAOA score falls below the classical optimum.",
+    st.caption(
+        "These scores use the estimates you entered. They are not "
+        "monetary values or verified environmental measurements."
     )
 
     # --------------------------------------------------
-    # CAPACITY UTILIZATION
+    # RECOMMENDED COLLECTION PLAN
     # --------------------------------------------------
 
-    st.subheader("Collection capacity")
+    st.subheader("Recommended plan — exact classical baseline")
 
-    util1, util2 = st.columns(2)
+    st.write(
+        "The classical baseline checks every possible batch combination "
+        "and returns the highest-scoring selection that fits the capacity."
+    )
 
-    with util1:
-        st.markdown("#### QAOA (simulated)")
-        st.metric(
-            "Capacity used",
-            f"{qaoa['weight']} / {capacity} kg",
-            f"{qaoa_utilization:.1f}% utilized",
+    selected_names = set(classical["selected"])
+
+    selected_items = [
+        item for item in items
+        if item["name"] in selected_names
+    ]
+
+    plan_columns = {
+        "name": "Batch name",
+        "weight": "Weight (kg)",
+        "recovery": "Recovery estimate (points)",
+        "urgency": "Urgency",
+        "environment": "Environmental priority",
+        "score": "Priority score",
+        "special_handling": "Special handling required",
+    }
+
+    if selected_items:
+        plan_df = pd.DataFrame(selected_items).rename(
+            columns=plan_columns
         )
-        st.progress(min(qaoa_utilization / 100, 1.0))
-
-    with util2:
-        st.markdown("#### Exact classical")
-        st.metric(
-            "Capacity used",
-            f"{classical['weight']} / {capacity} kg",
-            f"{classical_utilization:.1f}% utilized",
-        )
-        st.progress(min(classical_utilization / 100, 1.0))
-
-    # --------------------------------------------------
-    # SCORE CHART
-    # --------------------------------------------------
-
-    st.subheader("Score comparison")
-
-    score_chart = pd.DataFrame(
-        {
-            "Method": [
-                "QAOA (simulated)",
-                "Exact classical",
-            ],
-            "Priority score": [
-                qaoa["score"],
-                classical["score"],
-            ],
-        }
-    ).set_index("Method")
-
-    st.bar_chart(
-        score_chart,
-        y="Priority score",
-        width="stretch",
-    )
-
-    if score_gap == 0:
-        st.success(
-            "The QAOA simulation matched the exact classical optimum "
-            "for this capacity in this run."
-        )
+        plan_df = plan_df[list(plan_columns.values())]
     else:
+        plan_df = pd.DataFrame(columns=list(plan_columns.values()))
+
+    p1, p2, p3 = st.columns(3)
+    p1.metric("Selected batches", len(classical["selected"]))
+    p2.metric("Total weight", f"{classical['weight']:g} kg")
+    p3.metric("Capacity used", f"{classical_utilization:.1f}%")
+
+    st.dataframe(plan_df, width="stretch", hide_index=True)
+
+    if any(
+        item.get("special_handling", False)
+        for item in selected_items
+    ):
         st.warning(
-            f"The QAOA result is {score_gap} points below the exact "
-            f"classical optimum ({gap_percent:.1f}% optimality gap)."
+            "A selected batch is flagged for special handling. Confirm "
+            "applicable safety, segregation, packaging, and transport "
+            "requirements before collecting it."
         )
 
+    rejected_items = [
+        item for item in items
+        if item["name"] not in selected_names
+    ]
+
+    with st.expander("View batches not selected"):
+        if rejected_items:
+            rejected_df = pd.DataFrame(rejected_items).rename(
+                columns=plan_columns
+            )
+            st.dataframe(
+                rejected_df,
+                width="stretch",
+                hide_index=True,
+            )
+            st.caption(
+                "These batches were excluded from this capacity-limited "
+                "selection. Review deadlines and handling requirements "
+                "before deciding when to collect them."
+            )
+        else:
+            st.write("All entered batches were selected.")
+
     # --------------------------------------------------
-    # SELECTED BATCHES
+    # METHOD COMPARISON
     # --------------------------------------------------
 
-    st.subheader("Selected e-waste batches")
+    st.subheader("Qiskit simulation vs classical baseline")
 
     left, right = st.columns(2)
 
-    def selected_batch_table(solution):
-        selected_names = solution["selected"]
-        selected_items = [
-            item for item in items
-            if item["name"] in selected_names
-        ]
-
-        columns = {
-            "name": "E-waste batch",
-            "weight": "Weight (kg)",
-            "recovery": "Recovery value",
-            "urgency": "Urgency",
-            "environment": "Environmental priority",
-            "score": "Priority score",
-        }
-
-        if not selected_items:
-            return pd.DataFrame(columns=list(columns.values()))
-
-        return pd.DataFrame(selected_items).rename(
-            columns=columns
-        )[
-            list(columns.values())
-        ]
-
     with left:
-        st.markdown("#### QAOA selection")
-        st.write(f"**Total weight:** {qaoa['weight']} kg")
-        st.write(f"**Total priority score:** {qaoa['score']}")
-        st.dataframe(
-            selected_batch_table(qaoa),
-            width="stretch",
-            hide_index=True,
-        )
+        st.markdown("#### QAOA-style simulation")
+        st.metric("Selected weight", f"{qaoa['weight']:g} kg")
+        st.metric("Capacity used", f"{qaoa_utilization:.1f}%")
+        st.write("Selected batches:")
+        st.write(qaoa["selected"] or "None")
 
     with right:
-        st.markdown("#### Classical selection")
-        st.write(f"**Total weight:** {classical['weight']} kg")
-        st.write(f"**Total priority score:** {classical['score']}")
-        st.dataframe(
-            selected_batch_table(classical),
-            width="stretch",
-            hide_index=True,
+        st.markdown("#### Exact classical baseline")
+        st.metric("Selected weight", f"{classical['weight']:g} kg")
+        st.metric("Capacity used", f"{classical_utilization:.1f}%")
+        st.write("Selected batches:")
+        st.write(classical["selected"] or "None")
+
+    score_chart = pd.DataFrame(
+        {
+            "Method": ["QAOA-style simulation", "Exact classical"],
+            "Priority score": [qaoa["score"], classical["score"]],
+        }
+    ).set_index("Method")
+
+    st.bar_chart(score_chart, y="Priority score", width="stretch")
+
+    if score_gap == 0:
+        st.success(
+            "The simulation matched the exact classical optimum "
+            "for these inputs in this run."
+        )
+    else:
+        st.warning(
+            f"The simulation was {score_gap:g} points below the classical "
+            f"optimum ({gap_percent:.1f}% optimality gap)."
+        )
+
+    with st.expander("Qiskit experiment details and limitations"):
+        st.write(f"Parameter search: {details['parameter_search']}")
+        st.write(f"Circuit repetitions: {details['reps']}")
+        st.write(f"Measurement samples: {details['shots']}")
+        st.write(
+            "Expected penalized cost: "
+            f"{details['expected_penalized_cost']:.3f}"
+        )
+
+        st.markdown(
+            """
+            - The classical baseline checks all possible selections.
+            - The QAOA-style prototype uses a statevector simulator and
+              coarse grid search.
+            - This is not a run on quantum hardware.
+            - Matching the classical result does not demonstrate
+              quantum advantage.
+            - This version does not optimize travel routes, pickup
+              deadlines, storage compatibility, or regulatory compliance.
+            """
         )
 
     # --------------------------------------------------
-    # COMPARISON TABLE
+    # EXPORT
     # --------------------------------------------------
 
-    st.subheader("Method comparison")
+    st.subheader("4. Export results")
+
+    st.download_button(
+        "Download selected collection plan (CSV)",
+        data=plan_df.to_csv(index=False),
+        file_name="e_waste_collection_plan.csv",
+        mime="text/csv",
+        width="stretch",
+    )
 
     comparison = pd.DataFrame(
         [
             {
-                "Method": "QAOA (simulated)",
+                "Method": "QAOA-style simulation",
                 "Priority score": qaoa["score"],
                 "Collected weight (kg)": qaoa["weight"],
                 "Capacity used (%)": round(qaoa_utilization, 1),
@@ -306,50 +452,8 @@ if st.button("Run optimization and compare", type="primary", width="stretch"):
         ]
     )
 
-    st.dataframe(
-        comparison,
-        width="stretch",
-        hide_index=True,
-    )
-
-    # --------------------------------------------------
-    # EXPERIMENT DETAILS
-    # --------------------------------------------------
-
-    with st.expander("View QAOA experiment details"):
-        st.write(f"**Parameter search:** {details['parameter_search']}")
-        st.write(f"**Circuit repetitions:** {details['reps']}")
-        st.write(f"**Measurement samples:** {details['shots']}")
-        st.write(
-            "**Expected penalized cost:** "
-            f"{details['expected_penalized_cost']:.3f}"
-        )
-
-        st.markdown(
-            """
-            **How to interpret these results**
-
-            - The classical baseline exhaustively checks every possible
-              batch selection and returns the best feasible solution.
-            - The QAOA-style circuit uses a statevector simulator and a
-              coarse grid search over circuit parameters.
-            - The optimality gap measures the difference between the
-              QAOA score and the exact classical optimum.
-            - This prototype uses six illustrative batches, so exhaustive
-              classical optimization is computationally practical.
-            - Matching the classical result does not establish quantum
-              advantage or demonstrate better real-world performance.
-            """
-        )
-
-    # --------------------------------------------------
-    # DOWNLOAD RESULTS
-    # --------------------------------------------------
-
-    st.subheader("Export results")
-
     st.download_button(
-        label="Download comparison as CSV",
+        "Download optimizer comparison (CSV)",
         data=comparison.to_csv(index=False),
         file_name="e_waste_optimization_comparison.csv",
         mime="text/csv",
@@ -358,13 +462,14 @@ if st.button("Run optimization and compare", type="primary", width="stretch"):
 
 else:
     st.divider()
-    st.subheader("Ready to optimize?")
+    st.subheader("Ready to plan a collection?")
+
     st.write(
-        "Choose a collection capacity using the sidebar, then run "
-        "the optimization to compare both methods."
+        "Edit the table above, set your collection capacity, "
+        "and click **Run optimization and compare**."
     )
 
     st.caption(
-        "The score is a prototype prioritization metric, not a "
-        "measured monetary value or verified environmental impact."
+        "The default rows are illustrative examples. Replace them with "
+        "your own data before using results for planning."
     )

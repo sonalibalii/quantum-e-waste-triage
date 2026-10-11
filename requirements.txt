@@ -1,8 +1,5 @@
-# Baseline dependencies for Qiskit Fall Fest 2026 Hackathon
-qiskit>=1.0.0
-qiskit-aer>=0.14.0
-numpy
-matplotlib
-rustworkx
-scipy
-jupyter
+
+streamlit>=1.50.0
+qiskit>=2.0.0
+numpy>=2.0.0
+pandas>=2.2.0
